@@ -20,7 +20,7 @@ If you prefer to run on the command line, type
 
 ```bash
 ./gradlew installDebug
-adb shell am start com.chriscartland.myproject/.MainActivity
+adb shell am start com.chriscartland.adbconnect/.MainActivity
 ```
 
 License
