@@ -23,6 +23,12 @@ import android.text.format.Formatter;
 import android.util.Log;
 import android.widget.TextView;
 
+import com.google.android.things.pio.Gpio;
+import com.google.android.things.pio.GpioCallback;
+import com.google.android.things.pio.PeripheralManagerService;
+
+import java.io.IOException;
+
 /**
  * Skeleton of the main Android Things activity. Implement your device's logic
  * in this class.
@@ -44,21 +50,68 @@ import android.widget.TextView;
  */
 public class MainActivity extends Activity {
     private static final String TAG = MainActivity.class.getSimpleName();
+    private Gpio mButtonGpio;
+    private Gpio mLedGpio;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Log.i(TAG, "Starting ButtonActivity");
+
         setContentView(R.layout.main_activity);
         Log.d(TAG, "onCreate");
         WifiManager wm = (WifiManager) getSystemService(WIFI_SERVICE);
         String ip = Formatter.formatIpAddress(wm.getConnectionInfo().getIpAddress());
         ((TextView)findViewById(R.id.ip_address)).setText(getString(R.string.connect_ip, ip));
         ((TextView)findViewById(R.id.package_name)).setText(getPackageName());
+
+        PeripheralManagerService service = new PeripheralManagerService();
+        try {
+            String ledPinName = BoardDefaults.getGPIOForLED();
+            mLedGpio = service.openGpio(ledPinName);
+            mLedGpio.setDirection(Gpio.DIRECTION_OUT_INITIALLY_LOW);
+
+            String buttonPinName = BoardDefaults.getGPIOForButton();
+            mButtonGpio = service.openGpio(buttonPinName);
+            mButtonGpio.setDirection(Gpio.DIRECTION_IN);
+            mButtonGpio.setEdgeTriggerType(Gpio.EDGE_FALLING);
+            mButtonGpio.registerGpioCallback(new GpioCallback() {
+                @Override
+                public boolean onGpioEdge(Gpio gpio) {
+                    Log.i(TAG, "GPIO changed, button pressed");
+                    if (mLedGpio == null) {
+                        return false;
+                    }
+                    try {
+                        // Toggle the GPIO state
+                        mLedGpio.setValue(!mLedGpio.getValue());
+                        Log.d(TAG, "State set to " + mLedGpio.getValue());
+
+                    } catch (IOException e) {
+                        Log.e(TAG, "Error on PeripheralIO API", e);
+                    }
+                    return true;
+                }
+            });
+        } catch (IOException e) {
+            Log.e(TAG, "Error on PeripheralIO API", e);
+        }
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         Log.d(TAG, "onDestroy");
+        if (mButtonGpio != null) {
+            // Close the Gpio pin
+            Log.i(TAG, "Closing Button GPIO pin");
+            try {
+                mButtonGpio.close();
+            } catch (IOException e) {
+                Log.e(TAG, "Error on PeripheralIO API", e);
+            } finally {
+                mButtonGpio = null;
+            }
+        }
     }
 }
